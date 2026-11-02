@@ -73,6 +73,10 @@
   .roll .no { color: var(--muted); width: 44px; }
   .roll .nm { font-weight: 600; font-size: 16px; cursor: pointer; user-select: none; }
   .roll .nm:hover { color: var(--primary); }
+  .roll .nm .md, .adm .md { margin-left: 6px; font-size: 12px; font-weight: 500; color: var(--ok); }
+  .adm input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--ok); cursor: pointer; vertical-align: middle; }
+  .adm tr.dirty td { background: var(--warn-weak); }
+  .adm td.all, .adm th.all { border-right: 1px solid var(--line); }
   .roll label.cell { cursor: pointer; }
   .roll input[type=checkbox] { width: 24px; height: 24px; accent-color: var(--ok); cursor: pointer; }
   .roll tr.dirty td { background: var(--warn-weak); }
@@ -224,13 +228,20 @@
       </div>
       <div class="muted" id="a-count"></div>
     </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>학번</th><th>이름</th><th class="hide-m">시리얼번호</th><th class="c">노트북</th><th class="c">충전기</th><th class="c">케이블</th>
+    <div class="tbl-wrap" style="margin-bottom:90px">
+      <table class="adm">
+        <thead><tr><th>학번</th><th>이름</th><th class="hide-m">시리얼번호</th><th class="c all">모두</th><th class="c">노트북</th><th class="c">충전기</th><th class="c">케이블</th>
           <th>상태</th><th class="hide-m">제출시각</th><th class="hide-m">비고</th><th></th></tr></thead>
         <tbody id="a-body"></tbody>
       </table>
     </div>
+  </div>
+</div>
+
+<div class="savebar hidden" id="a-savebar">
+  <div class="in" style="max-width:1100px">
+    <div class="info" id="a-saveinfo"></div>
+    <button class="btn ok" onclick="adminSave()">✅ 확인</button>
   </div>
 </div>
 
@@ -240,14 +251,13 @@ var Q = new URLSearchParams(location.search);
 var API_ID = /^[A-Za-z0-9_-]{20,}$/.test(Q.get('api') || '') ? Q.get('api') : '';
 var API_URL = 'https://script.google.com/macros/s/' + API_ID + '/exec';
 var C = { cls: '', key: '', rows: [], orig: {} };   // 반별 체크: orig = 서버에서 마지막으로 받은 값
-var A = { pw: '', data: null };
+var A = { pw: '', data: null, orig: {} };   // orig = 서버에서 마지막으로 받은 물품 체크
 var ITEMS = ['notebook', 'charger', 'cable'];
 
 function $(id) { return document.getElementById(id); }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
   return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function badge(st) { return '<span class="badge b-' + st + '">' + st + '</span>'; }
-function ox(v, show) { return show ? (v ? '<span class="o">O</span>' : '<span class="x">X</span>') : '<span class="muted">-</span>'; }
 function showMsg(id, text, type) { var m = $(id); m.className = 'msg show ' + (type || 'err'); m.textContent = text; }
 function hideMsg(id) { $(id).className = 'msg'; }
 function loading(on) { $('loading').classList.toggle('show', !!on); }
@@ -268,6 +278,11 @@ function call(fn) {
       if (!r.ok) throw new Error(r.error);
       return r.data;
     }, function (e) { loading(false); throw e; });
+}
+// '2026-11-02 11:47:04' → '11.2.'
+function md(t) {
+  var m = String(t || '').match(/\d{4}\D+(\d{1,2})\D+(\d{1,2})/);
+  return m ? (+m[1]) + '.' + (+m[2]) + '.' : '';
 }
 function errText(e) { return (e && e.message ? e.message : String(e)).replace(/^Error:\s*/, ''); }
 
@@ -300,11 +315,11 @@ function renderClass() {
     statBox(C.rows.length - done, '미제출') + statBox(dirty, '저장 안 됨', dirty ? 'warn' : '');
   $('c-body').innerHTML = C.rows.map(function (r, i) {
     var any = r.notebook || r.charger || r.cable, d = isDirty(r);
-    var st = d ? badge('변경') : badge(r.status) + (r.submittedAt ? ' <span class="muted hide-m">' + esc(r.submittedAt.slice(5, 16)) + '</span>' : '');
+    var st = d ? badge('변경') : badge(r.status);
     return '<tr class="' + (d ? 'dirty' : any ? 'done' : '') + '">' +
       '<td class="c no"><div class="cell">' + esc(r.no) + '</div></td>' +
       '<td><div class="cell nm" onclick="toggleRow(' + i + ')">' + esc(r.name) +
-        '</div></td>' +
+        (!d && md(r.submittedAt) ? '<span class="md">' + md(r.submittedAt) + '</span>' : '') + '</div></td>' +
       '<td class="c all"><label class="cell"><input type="checkbox" ' + (r.notebook && r.charger && r.cable ? 'checked' : '') +
         ' onchange="setAll(' + i + ',this.checked)"></label></td>' +
       ITEMS.map(function (k) {
@@ -337,7 +352,7 @@ function classRefresh() {
   classLoad().catch(function (e) { showMsg('c-msg', errText(e)); });
 }
 window.addEventListener('beforeunload', function (e) {
-  if (C.rows.length && dirtyRows().length) { e.preventDefault(); e.returnValue = ''; }
+  if ((C.rows.length && dirtyRows().length) || adminDirtyRows().length) { e.preventDefault(); e.returnValue = ''; }
 });
 
 /* ---------- 관리자 ---------- */
@@ -371,9 +386,13 @@ function adminLogin() {
     $('a-login').classList.add('hidden'); $('a-main').classList.remove('hidden');
   }).catch(function (e) { showMsg('a-login-msg', errText(e)); });
 }
-function adminRefresh() { call('adminLoad', A.pw).then(setAdmin).catch(function (e) { showMsg('a-msg', errText(e)); }); }
+function adminRefresh() {
+  if (adminDirtyRows().length && !confirm('저장하지 않은 체크가 있어요. 새로고침하면 사라집니다. 계속할까요?')) return;
+  call('adminLoad', A.pw).then(setAdmin).catch(function (e) { showMsg('a-msg', errText(e)); }); }
 function setAdmin(d) {
   A.data = d;
+  A.orig = {};
+  d.rows.forEach(function (r) { A.orig[r.sid] = { notebook: r.notebook, charger: r.charger, cable: r.cable }; });
   setTitle(d.title);
   if (d.message) showMsg('a-msg', d.message, 'ok'); else hideMsg('a-msg');
   $('a-loaded').textContent = '불러온 시각 ' + d.loadedAt;
@@ -431,13 +450,39 @@ function renderAdminList() {
   });
   $('a-count').textContent = rows.length + '명';
   $('a-body').innerHTML = rows.map(function (r) {
-    var sub = r.status !== '미제출';
-    return '<tr><td>' + esc(r.sid) + '</td><td>' + esc(r.name) + '</td><td class="hide-m muted">' + esc(r.serial) + '</td>' +
-      '<td class="c">' + ox(r.notebook, sub) + '</td><td class="c">' + ox(r.charger, sub) + '</td><td class="c">' + ox(r.cable, sub) + '</td>' +
-      '<td>' + badge(r.status) + '</td><td class="hide-m muted">' + esc(r.submittedAt) + '</td>' +
+    var sub = r.status !== '미제출', d = adminDirty(r);
+    return '<tr class="' + (d ? 'dirty' : '') + '"><td>' + esc(r.sid) + '</td><td>' + esc(r.name) +
+        (!d && md(r.submittedAt) ? '<span class="md">' + md(r.submittedAt) + '</span>' : '') + '</td>' +
+      '<td class="hide-m muted">' + esc(r.serial) + '</td>' +
+      '<td class="c all"><input type="checkbox" ' + (r.notebook && r.charger && r.cable ? 'checked' : '') +
+        ' onchange="adminSet(\'' + r.sid + '\', null, this.checked)"></td>' +
+      ITEMS.map(function (k) {
+        return '<td class="c"><input type="checkbox" ' + (r[k] ? 'checked' : '') +
+          ' onchange="adminSet(\'' + r.sid + '\', \'' + k + '\', this.checked)"></td>';
+      }).join('') +
+      '<td>' + (d ? badge('변경') : badge(r.status)) + '</td><td class="hide-m muted">' + esc(r.submittedAt) + '</td>' +
       '<td class="hide-m muted">' + esc(r.memo) + '</td>' +
       '<td>' + (sub ? '<button class="btn ghost sm" style="color:var(--bad)" onclick="adminReset(\'' + r.sid + '\', \'' + esc(r.name) + '\')">제출삭제</button>' : '') + '</td></tr>';
-  }).join('') || '<tr><td colspan="10" class="c muted" style="padding:24px">해당 학생이 없습니다.</td></tr>';
+  }).join('') || '<tr><td colspan="11" class="c muted" style="padding:24px">해당 학생이 없습니다.</td></tr>';
+  var n = adminDirtyRows().length;
+  $('a-savebar').classList.toggle('hidden', !n);
+  $('a-saveinfo').innerHTML = '저장 안 된 학생 <b>' + n + '명</b>';
+}
+function adminDirty(r) {
+  var o = A.orig[r.sid];
+  return ITEMS.some(function (k) { return r[k] !== o[k]; });
+}
+function adminDirtyRows() { return A.data ? A.data.rows.filter(adminDirty) : []; }
+// k 가 null 이면 '모두'
+function adminSet(sid, k, v) {
+  var r = A.data.rows.filter(function (x) { return x.sid === sid; })[0];
+  (k ? [k] : ITEMS).forEach(function (x) { r[x] = v; });
+  renderAdminList();
+}
+function adminSave() {
+  var changes = adminDirtyRows().map(function (r) { return { sid: r.sid, notebook: r.notebook, charger: r.charger, cable: r.cable }; });
+  if (!changes.length) return;
+  call('adminSave', A.pw, changes).then(setAdmin).catch(function (e) { showMsg('a-msg', errText(e)); });
 }
 function adminReset(sid, name) {
   if (!confirm(sid + ' ' + name + ' 학생의 제출 내역을 삭제할까요?\n(물품 체크가 모두 지워지고 미제출로 돌아갑니다)')) return;
@@ -448,6 +493,7 @@ function adminReset(sid, name) {
 function go(mode) {
   ['home', 'class', 'admin'].forEach(function (m) { $('v-' + m).classList.toggle('hidden', m !== mode); });
   if (mode !== 'class') $('c-savebar').classList.add('hidden');
+  if (mode !== 'admin') $('a-savebar').classList.add('hidden');
   window.scrollTo(0, 0);
 }
 // 반 링크로 들어온 경우: 홈 = 우리 반 화면을 새로 조회
@@ -459,7 +505,8 @@ function goHome() {
     classLoad().catch(function (e) { showMsg('c-msg', errText(e)); });
     return;
   }
-  A = { pw: '', data: null }; $('a-pw').value = '';
+  if (adminDirtyRows().length && !confirm('저장하지 않은 체크가 있어요. 버리고 나갈까요?')) return;
+  A = { pw: '', data: null, orig: {} }; $('a-pw').value = '';
   $('a-main').classList.add('hidden'); $('a-login').classList.remove('hidden');
   hideMsg('h-msg');
   go('home');

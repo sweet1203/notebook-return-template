@@ -36,6 +36,7 @@ const API = {
   classLoad: classLoad,
   classSave: classSave,
   adminLoad: adminLoad,
+  adminSave: adminSave,
   adminReset: adminReset
 };
 
@@ -240,6 +241,17 @@ function adminLoad(pw) {
     xlsxUrl: 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx',
     loadedAt: now_()
   };
+}
+
+// 관리자가 학생별 물품 체크 저장 (모든 반)
+function adminSave(pw, changes) {
+  checkAdmin_(pw);
+  const count = withLock_(function () {
+    return writeItems_(loadStatus_(), changes || []);
+  });
+  const res = adminLoad(pw);
+  res.message = count + '명 저장했습니다';
+  return res;
 }
 
 // 제출 삭제 → 물품 체크를 모두 지우고 미제출로

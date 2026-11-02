@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>노트북 반납</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --text: #1d2330; --muted: #6b7280; --line: #e5e7eb;
+    --primary: #2f5bea; --primary-weak: #e8eefe;
+    --ok: #15803d; --ok-weak: #dcfce7; --warn: #b45309; --warn-weak: #fef3c7;
+    --none: #6b7280; --none-weak: #f1f5f9; --bad: #b91c1c; --bad-weak: #fee2e2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+    font-size: 15px; line-height: 1.5; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 20px 16px 48px; }
+  .wrap.wide { max-width: 1100px; }
+  .wrap.mid { max-width: 760px; padding-bottom: 110px; }
+  h1 { font-size: 22px; margin: 4px 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 18px; font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+  label.f { display: block; font-weight: 600; margin: 0 0 6px; font-size: 14px; }
+  input[type=text], input[type=password], select {
+    width: 100%; padding: 12px 12px; border: 1px solid #cfd4dc; border-radius: 10px; font-size: 16px; background: #fff; }
+  input:focus, select:focus { outline: 2px solid var(--primary); border-color: transparent; }
+  .field { margin-bottom: 14px; }
+  button { font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid transparent; padding: 11px 16px; font-weight: 600; }
+  button:disabled { opacity: .45; cursor: default; }
+  .btn { background: var(--primary); color: #fff; }
+  .btn.block { width: 100%; padding: 14px; font-size: 16px; }
+  .btn.ghost { background: #fff; color: var(--text); border-color: #cfd4dc; }
+  .btn.ok { background: var(--ok); }
+  .btn.sm { padding: 6px 10px; font-size: 13px; border-radius: 8px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .msg { padding: 12px 14px; border-radius: 10px; margin: 12px 0 0; font-size: 14px; display: none; }
+  .msg.show { display: block; }
+  .msg.err { background: var(--bad-weak); color: var(--bad); }
+  .msg.ok { background: var(--ok-weak); color: var(--ok); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .b-미제출 { background: var(--none-weak); color: var(--none); }
+  .b-제출완료 { background: var(--ok-weak); color: var(--ok); }
+  .b-변경 { background: var(--warn-weak); color: var(--warn); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 22px; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .stat.warn b { color: var(--warn); }
+  .tbl-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th { background: #fafbfc; font-size: 13px; color: var(--muted); }
+  td.c, th.c { text-align: center; }
+  tr:last-child td { border-bottom: 0; }
+  .o { color: var(--ok); font-weight: 700; }
+  .x { color: var(--bad); font-weight: 700; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .toolbar select, .toolbar input { width: auto; padding: 8px 10px; font-size: 14px; }
+  .loading { position: fixed; inset: 0; background: rgba(255,255,255,.6); display: none; align-items: center; justify-content: center; z-index: 20; font-weight: 600; }
+  .loading.show { display: flex; }
+  .hidden { display: none !important; }
+  .topbar { position: sticky; top: 0; z-index: 5; background: rgba(245,246,248,.92); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+  .topbar .in { max-width: 1100px; margin: 0 auto; padding: 8px 16px; display: flex; align-items: center; justify-content: space-between; }
+  .topbar .home { background: #fff; border: 1px solid #cfd4dc; color: var(--text); padding: 7px 12px; font-size: 14px; }
+  .topbar .t { color: var(--muted); font-size: 13px; font-weight: 600; }
+
+  /* 반별 명렬표 */
+  .roll td { padding: 0; height: 52px; }
+  .roll td > .cell { padding: 0 10px; height: 52px; display: flex; align-items: center; }
+  .roll td.c > .cell { justify-content: center; }
+  .roll .no { color: var(--muted); width: 44px; }
+  .roll .nm { font-weight: 600; font-size: 16px; cursor: pointer; user-select: none; }
+  .roll .nm:hover { color: var(--primary); }
+  .roll label.cell { cursor: pointer; }
+  .roll input[type=checkbox] { width: 24px; height: 24px; accent-color: var(--ok); cursor: pointer; }
+  .roll tr.dirty td { background: var(--warn-weak); }
+  .roll td.all, .roll th.all { border-right: 1px solid var(--line); }
+  .roll tr.done td { background: #f6fdf8; }
+  .help { font-size: 13px; color: var(--muted); background: var(--card); border: 1px dashed #cfd4dc; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+  .savebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0,0,0,.06); }
+  .savebar .in { max-width: 760px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+  .savebar .info { font-size: 14px; }
+  .savebar .info b { color: var(--warn); }
+  .savebar .btn { padding: 13px 22px; font-size: 16px; }
+
+  /* 홈 */
+  .menu { display: grid; gap: 12px; }
+  .menu button { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; background: var(--card);
+    border: 1px solid var(--line); border-radius: 14px; padding: 20px 18px; color: var(--text); }
+  .menu button:hover { border-color: var(--primary); background: var(--primary-weak); }
+  .menu .ic { font-size: 30px; }
+  .menu b { display: block; font-size: 18px; }
+  .menu span { color: var(--muted); font-size: 13px; font-weight: 400; }
+
+  /* 관리자 반별 링크 */
+  .links td.url { max-width: 380px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 12px; }
+  @media (max-width: 520px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .hide-m { display: none; }
+    .roll td > .cell { padding: 0 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="loading" id="loading">처리 중…</div>
+
+<div class="topbar" id="topbar">
+  <div class="in">
+    <span class="t" id="t-top">노트북 반납 확인</span>
+    <button class="home" onclick="goHome()">🏠 홈</button>
+  </div>
+</div>
+
+<!-- ================= 첫 화면 ================= -->
+<div class="wrap hidden" id="v-home">
+  <h1 id="h-title">노트북 반납 확인</h1>
+  <p class="sub" id="h-sub">담임선생님은 관리자에게 받은 <b>우리 반 링크</b>로 접속해 주세요.</p>
+  <div class="menu" id="h-menu">
+    <button onclick="go('admin')"><span class="ic">🗂️</span><div><b>관리자</b><span>전체 반납 현황 · 반별 링크 · 최종 수합</span></div></button>
+  </div>
+  <div class="msg" id="h-msg"></div>
+  <div class="card hidden" id="h-noapi">
+    <b>학교 링크로 접속해 주세요.</b>
+    <p class="muted" style="font-size:14px;margin:6px 0 0">이 주소에는 학교 정보가 없어요. 관리자에게 받은 링크로 다시 접속해 주세요.<br>
+    직접 설치하려면 <a href="https://github.com/sweet1203/notebook-return-template" target="_blank">설치 안내</a>를 보세요.</p>
+  </div>
+</div>
+
+<!-- ================= 반별 체크 ================= -->
+<div class="wrap mid hidden" id="v-class">
+  <div class="toolbar">
+    <div>
+      <h1 id="c-title" style="margin:0"></h1>
+      <div class="muted" id="c-loaded"></div>
+    </div>
+    <button class="btn ghost" onclick="classRefresh()">🔄 조회</button>
+  </div>
+  <div class="stats" id="c-stats"></div>
+  <div class="help">
+    ✔ <b>[모두]</b>를 체크하면 노트북·충전기·케이블이 한 번에 체크돼요. 물품별로 따로 체크할 수도 있어요.<br>
+    ✔ 다 체크한 뒤 아래 <b>[확인]</b>을 눌러야 저장돼요. 저장 전인 줄은 노란색으로 보여요.<br>
+    ✔ 잘못 저장했으면 체크를 풀고 다시 <b>[확인]</b>을 누르면 돼요. 최신 내용은 <b>[조회]</b>로 다시 불러와요.
+  </div>
+  <div class="msg" id="c-msg" style="margin:0 0 12px"></div>
+  <div class="tbl-wrap">
+    <table class="roll">
+      <thead><tr>
+        <th class="c">번호</th><th>이름</th><th class="c all">모두</th><th class="c">노트북</th><th class="c">충전기</th><th class="c">케이블</th><th>상태</th>
+      </tr></thead>
+      <tbody id="c-body"></tbody>
+    </table>
+  </div>
+</div>
+<div class="savebar hidden" id="c-savebar">
+  <div class="in">
+    <div class="info" id="c-saveinfo"></div>
+    <div class="row">
+      <button class="btn ok" onclick="classSave()">✅ 확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 관리자 ================= -->
+<div class="wrap wide hidden" id="v-admin">
+  <div id="a-login" class="wrap" style="padding:0">
+    <h1>최종 수합 (관리자)</h1>
+    <p class="sub">관리자 비밀번호를 입력하세요.</p>
+    <div class="card">
+      <div class="field">
+        <label class="f" for="a-pw">관리자 비밀번호</label>
+        <input type="password" id="a-pw" onkeydown="if(event.key==='Enter')adminLogin()">
+      </div>
+      <button class="btn block" onclick="adminLogin()">들어가기</button>
+      <div class="msg" id="a-login-msg"></div>
+    </div>
+  </div>
+
+  <div id="a-main" class="hidden">
+    <div class="toolbar">
+      <div>
+        <h1 style="margin:0">노트북 반납 최종 수합</h1>
+        <div class="muted" id="a-loaded"></div>
+      </div>
+      <div class="row">
+        <a id="a-sheet" target="_blank"><button class="btn ghost sm">스프레드시트 열기</button></a>
+        <a id="a-xlsx" target="_blank"><button class="btn ghost sm">엑셀(.xlsx) 다운로드</button></a>
+        <button class="btn ghost sm" onclick="adminRefresh()">새로고침</button>
+      </div>
+    </div>
+    <div class="msg" id="a-msg" style="margin:0 0 12px"></div>
+    <div class="stats" id="a-stats"></div>
+
+    <h3 style="margin:18px 0 8px">반별 현황</h3>
+    <div class="tbl-wrap" style="margin-bottom:18px">
+      <table>
+        <thead><tr><th>반</th><th>담임</th><th class="c">인원</th><th class="c">제출완료</th><th class="c">미제출</th>
+          <th class="c">노트북</th><th class="c">충전기</th><th class="c">케이블</th><th class="c">진행률</th></tr></thead>
+        <tbody id="a-summary"></tbody>
+      </table>
+    </div>
+
+    <div class="toolbar" style="margin-top:18px">
+      <h3 style="margin:0">반별 링크 (담임선생님께 전달)</h3>
+      <button class="btn ghost sm" onclick="copyAllLinks(this)">전체 복사</button>
+    </div>
+    <div class="tbl-wrap links" style="margin-bottom:18px">
+      <table>
+        <thead><tr><th>반</th><th>담임</th><th class="hide-m">링크</th><th></th></tr></thead>
+        <tbody id="a-links"></tbody>
+      </table>
+    </div>
+
+    <h3 style="margin:18px 0 8px">학생별 명단</h3>
+    <div class="toolbar">
+      <div class="row">
+        <select id="a-cls" onchange="renderAdminList()"><option value="">전체 반</option></select>
+        <select id="a-st" onchange="renderAdminList()">
+          <option value="">전체 상태</option><option>제출완료</option><option>미제출</option>
+          <option value="누락">물품 누락(제출완료 중)</option>
+        </select>
+        <input type="text" id="a-q" placeholder="이름·학번 검색" oninput="renderAdminList()">
+      </div>
+      <div class="muted" id="a-count"></div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>학번</th><th>이름</th><th class="hide-m">시리얼번호</th><th class="c">노트북</th><th class="c">충전기</th><th class="c">케이블</th>
+          <th>상태</th><th class="hide-m">제출시각</th><th class="hide-m">비고</th><th></th></tr></thead>
+        <tbody id="a-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// 학교마다 다른 Apps Script 웹앱 → 링크의 api 값(웹앱 아이디)으로 받음
+var Q = new URLSearchParams(location.search);
+var API_ID = /^[A-Za-z0-9_-]{20,}$/.test(Q.get('api') || '') ? Q.get('api') : '';
+var API_URL = 'https://script.google.com/macros/s/' + API_ID + '/exec';
+var C = { cls: '', key: '', rows: [], orig: {} };   // 반별 체크: orig = 서버에서 마지막으로 받은 값
+var A = { pw: '', data: null };
+var ITEMS = ['notebook', 'charger', 'cable'];
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+  return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function badge(st) { return '<span class="badge b-' + st + '">' + st + '</span>'; }
+function ox(v, show) { return show ? (v ? '<span class="o">O</span>' : '<span class="x">X</span>') : '<span class="muted">-</span>'; }
+function showMsg(id, text, type) { var m = $(id); m.className = 'msg show ' + (type || 'err'); m.textContent = text; }
+function hideMsg(id) { $(id).className = 'msg'; }
+function loading(on) { $('loading').classList.toggle('show', !!on); }
+function statBox(n, label, cls) { return '<div class="stat ' + (cls || '') + '"><b>' + n + '</b><span>' + label + '</span></div>'; }
+
+// Apps Script API 호출. text/plain 으로 보내야 CORS 사전요청 없이 동작함
+function call(fn) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  loading(true);
+  return fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ fn: fn, args: args })
+  }).then(function (res) { return res.json(); })
+    .catch(function () { throw new Error('서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.'); })
+    .then(function (r) {
+      loading(false);
+      if (!r.ok) throw new Error(r.error);
+      return r.data;
+    }, function (e) { loading(false); throw e; });
+}
+function errText(e) { return (e && e.message ? e.message : String(e)).replace(/^Error:\s*/, ''); }
+
+/* ---------- 반별 체크 ---------- */
+function isDirty(r) {
+  var o = C.orig[r.sid];
+  return ITEMS.some(function (k) { return r[k] !== o[k]; });
+}
+function dirtyRows() { return C.rows.filter(isDirty); }
+
+function classLoad() {
+  return call('classLoad', C.cls, C.key).then(setClass);
+}
+function setClass(d) {
+  C.rows = d.rows;
+  C.orig = {};
+  d.rows.forEach(function (r) { C.orig[r.sid] = { notebook: r.notebook, charger: r.charger, cable: r.cable }; });
+  setTitle(d.title);
+  var label = (d.grade ? d.grade + '-' : '') + d.cls + (d.grade ? '' : '반');
+  $('c-title').textContent = label + ' 노트북 반납 확인' + (d.teacher ? ' (' + d.teacher + ' 선생님)' : '');
+  $('c-loaded').textContent = '조회 시각 ' + d.loadedAt;
+  document.title = label + ' 노트북 반납';
+  if (d.message) showMsg('c-msg', d.message, 'ok'); else hideMsg('c-msg');
+  renderClass();
+}
+function renderClass() {
+  var done = C.rows.filter(function (r) { return r.notebook || r.charger || r.cable; }).length;
+  var dirty = dirtyRows().length;
+  $('c-stats').innerHTML = statBox(C.rows.length, '전체') + statBox(done, '제출') +
+    statBox(C.rows.length - done, '미제출') + statBox(dirty, '저장 안 됨', dirty ? 'warn' : '');
+  $('c-body').innerHTML = C.rows.map(function (r, i) {
+    var any = r.notebook || r.charger || r.cable, d = isDirty(r);
+    var st = d ? badge('변경') : badge(r.status) + (r.submittedAt ? ' <span class="muted hide-m">' + esc(r.submittedAt.slice(5, 16)) + '</span>' : '');
+    return '<tr class="' + (d ? 'dirty' : any ? 'done' : '') + '">' +
+      '<td class="c no"><div class="cell">' + esc(r.no) + '</div></td>' +
+      '<td><div class="cell nm" onclick="toggleRow(' + i + ')">' + esc(r.name) +
+        '</div></td>' +
+      '<td class="c all"><label class="cell"><input type="checkbox" ' + (r.notebook && r.charger && r.cable ? 'checked' : '') +
+        ' onchange="setAll(' + i + ',this.checked)"></label></td>' +
+      ITEMS.map(function (k) {
+        return '<td class="c"><label class="cell"><input type="checkbox" ' + (r[k] ? 'checked' : '') +
+          ' onchange="setItem(' + i + ',\'' + k + '\',this.checked)"></label></td>';
+      }).join('') +
+      '<td><div class="cell">' + st + '</div></td></tr>';
+  }).join('');
+  $('c-savebar').classList.toggle('hidden', !dirty);
+  $('c-saveinfo').innerHTML = '저장 안 된 학생 <b>' + dirty + '명</b>';
+}
+// 이름 클릭: 하나라도 빠져 있으면 3개 모두 체크, 다 체크돼 있으면 모두 해제
+function toggleRow(i) {
+  var r = C.rows[i], all = r.notebook && r.charger && r.cable;
+  ITEMS.forEach(function (k) { r[k] = !all; });
+  renderClass();
+}
+function setAll(i, v) {
+  ITEMS.forEach(function (k) { C.rows[i][k] = v; });
+  renderClass();
+}
+function setItem(i, k, v) { C.rows[i][k] = v; renderClass(); }
+function classSave() {
+  var changes = dirtyRows().map(function (r) { return { sid: r.sid, notebook: r.notebook, charger: r.charger, cable: r.cable }; });
+  if (!changes.length) return;
+  call('classSave', C.cls, C.key, changes).then(setClass).catch(function (e) { showMsg('c-msg', errText(e)); });
+}
+function classRefresh() {
+  if (dirtyRows().length && !confirm('저장하지 않은 체크가 있어요. 조회하면 사라집니다. 계속할까요?')) return;
+  classLoad().catch(function (e) { showMsg('c-msg', errText(e)); });
+}
+window.addEventListener('beforeunload', function (e) {
+  if (C.rows.length && dirtyRows().length) { e.preventDefault(); e.returnValue = ''; }
+});
+
+/* ---------- 관리자 ---------- */
+function countBy(rows) {
+  var c = { total: rows.length, 제출완료: 0, 미제출: 0, notebook: 0, charger: 0, cable: 0 };
+  rows.forEach(function (r) {
+    c[r.status]++;
+    if (r.notebook) c.notebook++; if (r.charger) c.charger++; if (r.cable) c.cable++;
+  });
+  return c;
+}
+function classLink(c) {
+  return location.origin + location.pathname + '?api=' + API_ID + '&class=' + c.cls + '&key=' + encodeURIComponent(c.key);
+}
+// 반 번호 → '3-1' (학년은 학번 첫 자리)
+function clsLabel(k) {
+  var r = A.data.rows.filter(function (x) { return x.cls === k; })[0];
+  return r ? r.grade + '-' + k : k + '반';
+}
+function setTitle(t) {
+  if (!t) return;
+  $('t-top').textContent = t; $('h-title').textContent = t;
+  if (!C.cls) document.title = t;
+}
+function adminLogin() {
+  hideMsg('a-login-msg');
+  var pw = $('a-pw').value.trim();
+  if (!pw) return showMsg('a-login-msg', '비밀번호를 입력해 주세요.');
+  call('adminLoad', pw).then(function (d) {
+    A.pw = pw; setAdmin(d);
+    $('a-login').classList.add('hidden'); $('a-main').classList.remove('hidden');
+  }).catch(function (e) { showMsg('a-login-msg', errText(e)); });
+}
+function adminRefresh() { call('adminLoad', A.pw).then(setAdmin).catch(function (e) { showMsg('a-msg', errText(e)); }); }
+function setAdmin(d) {
+  A.data = d;
+  setTitle(d.title);
+  if (d.message) showMsg('a-msg', d.message, 'ok'); else hideMsg('a-msg');
+  $('a-loaded').textContent = '불러온 시각 ' + d.loadedAt;
+  $('a-sheet').href = d.sheetUrl; $('a-xlsx').href = d.xlsxUrl;
+  var c = countBy(d.rows);
+  var miss = d.rows.filter(function (r) { return r.status === '제출완료' && !(r.notebook && r.charger && r.cable); }).length;
+  $('a-stats').innerHTML = statBox(c.total, '전체 학생') + statBox(c.제출완료, '제출완료') + statBox(c.미제출, '미제출') + statBox(miss, '물품 누락', miss ? 'warn' : '');
+
+  var classes = [];
+  d.rows.forEach(function (r) { if (classes.indexOf(r.cls) < 0) classes.push(r.cls); });
+  classes.sort(function (a, b) { return a - b; });
+  var teacher = {};
+  d.classes.forEach(function (k) { teacher[k.cls] = k.teacher; });
+  var sel = $('a-cls'), cur = sel.value;
+  sel.innerHTML = '<option value="">전체 반</option>' + classes.map(function (k) { return '<option value="' + k + '">' + clsLabel(k) + '</option>'; }).join('');
+  sel.value = cur;
+
+  $('a-summary').innerHTML = classes.map(function (k) {
+    var cc = countBy(d.rows.filter(function (r) { return r.cls === k; }));
+    var pct = cc.total ? Math.round(cc.제출완료 / cc.total * 100) : 0;
+    return '<tr><td>' + clsLabel(k) + '</td><td>' + esc(teacher[k] || '') + '</td><td class="c">' + cc.total + '</td>' +
+      '<td class="c">' + cc.제출완료 + '</td><td class="c">' + (cc.미제출 ? '<span class="x">' + cc.미제출 + '</span>' : 0) + '</td>' +
+      '<td class="c">' + cc.notebook + '</td><td class="c">' + cc.charger + '</td><td class="c">' + cc.cable + '</td><td class="c">' + pct + '%</td></tr>';
+  }).join('');
+
+  $('a-links').innerHTML = d.classes.map(function (k, i) {
+    var url = classLink(k);
+    return '<tr><td>' + esc(clsLabel(k.cls)) + '</td><td>' + esc(k.teacher) + '</td>' +
+      '<td class="url hide-m"><a href="' + esc(url) + '" target="_blank">' + esc(url) + '</a></td>' +
+      '<td><button class="btn ghost sm" onclick="copyLink(' + i + ', this)">링크 복사</button></td></tr>';
+  }).join('');
+  renderAdminList();
+}
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(function () {
+    var t = btn.textContent; btn.textContent = '복사됨 ✓';
+    setTimeout(function () { btn.textContent = t; }, 1500);
+  }, function () { prompt('아래 내용을 복사하세요', text); });
+}
+function copyLink(i, btn) { copyText(classLink(A.data.classes[i]), btn); }
+function copyAllLinks(btn) {
+  var text = A.data.classes.map(function (k) {
+    return clsLabel(k.cls) + (k.teacher ? ' ' + k.teacher + ' 선생님' : '') + '\n' + classLink(k);
+  }).join('\n\n');
+  copyText(text, btn);
+}
+function renderAdminList() {
+  var k = $('a-cls').value, st = $('a-st').value, q = $('a-q').value.trim();
+  var rows = A.data.rows.filter(function (r) {
+    if (k && r.cls !== k) return false;
+    if (st === '누락') { if (r.status !== '제출완료' || (r.notebook && r.charger && r.cable)) return false; }
+    else if (st && r.status !== st) return false;
+    if (q && (r.name + r.sid).indexOf(q) < 0) return false;
+    return true;
+  });
+  $('a-count').textContent = rows.length + '명';
+  $('a-body').innerHTML = rows.map(function (r) {
+    var sub = r.status !== '미제출';
+    return '<tr><td>' + esc(r.sid) + '</td><td>' + esc(r.name) + '</td><td class="hide-m muted">' + esc(r.serial) + '</td>' +
+      '<td class="c">' + ox(r.notebook, sub) + '</td><td class="c">' + ox(r.charger, sub) + '</td><td class="c">' + ox(r.cable, sub) + '</td>' +
+      '<td>' + badge(r.status) + '</td><td class="hide-m muted">' + esc(r.submittedAt) + '</td>' +
+      '<td class="hide-m muted">' + esc(r.memo) + '</td>' +
+      '<td>' + (sub ? '<button class="btn ghost sm" style="color:var(--bad)" onclick="adminReset(\'' + r.sid + '\', \'' + esc(r.name) + '\')">제출삭제</button>' : '') + '</td></tr>';
+  }).join('') || '<tr><td colspan="10" class="c muted" style="padding:24px">해당 학생이 없습니다.</td></tr>';
+}
+function adminReset(sid, name) {
+  if (!confirm(sid + ' ' + name + ' 학생의 제출 내역을 삭제할까요?\n(물품 체크가 모두 지워지고 미제출로 돌아갑니다)')) return;
+  call('adminReset', A.pw, sid).then(setAdmin).catch(function (e) { showMsg('a-msg', errText(e)); });
+}
+
+/* ---------- 시작 ---------- */
+function go(mode) {
+  ['home', 'class', 'admin'].forEach(function (m) { $('v-' + m).classList.toggle('hidden', m !== mode); });
+  if (mode !== 'class') $('c-savebar').classList.add('hidden');
+  window.scrollTo(0, 0);
+}
+// 반 링크로 들어온 경우: 홈 = 우리 반 화면을 새로 조회
+// 그 외: 관리자 로그인을 풀고 첫 화면으로
+function goHome() {
+  if (C.cls) {
+    if (dirtyRows().length && !confirm('저장하지 않은 체크가 있어요. 버리고 다시 불러올까요?')) return;
+    go('class');
+    classLoad().catch(function (e) { showMsg('c-msg', errText(e)); });
+    return;
+  }
+  A = { pw: '', data: null }; $('a-pw').value = '';
+  $('a-main').classList.add('hidden'); $('a-login').classList.remove('hidden');
+  hideMsg('h-msg');
+  go('home');
+}
+
+if (!API_ID) {
+  $('h-menu').classList.add('hidden'); $('h-sub').classList.add('hidden'); $('h-noapi').classList.remove('hidden');
+  go('home');
+} else if (Q.get('class')) {
+  C.cls = Q.get('class').replace(/^\d-/, '');
+  C.key = Q.get('key') || '';
+  go('class');
+  classLoad().catch(function (e) { C.cls = ''; go('home'); showMsg('h-msg', errText(e)); });
+} else if (Q.get('mode') === 'admin') {
+  go('admin');
+} else {
+  go('home');
+}
+if (API_ID && !Q.get('class')) call('info').then(function (d) { setTitle(d.title); }).catch(function () {});
+</script>
+</body>
+</html>

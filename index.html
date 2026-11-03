@@ -76,6 +76,19 @@
   .roll .nm .md, .adm .md { margin-left: 6px; font-size: 12px; font-weight: 500; color: var(--ok); }
   .adm input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--ok); cursor: pointer; vertical-align: middle; }
   .adm tr.dirty td { background: var(--warn-weak); }
+  .batches { display: grid; gap: 8px; }
+  .batch { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+  .batch summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+  .batch summary::-webkit-details-marker { display: none; }
+  .batch summary::before { content: '▸'; color: var(--muted); }
+  .batch[open] summary::before { content: '▾'; }
+  .batch .when { font-weight: 700; }
+  .batch .who { color: var(--muted); font-size: 13px; }
+  .batch .cnt { margin-left: auto; font-size: 13px; }
+  .batch .cnt b { font-size: 16px; color: var(--ok); }
+  .batch .cnt .x { font-weight: 700; }
+  .batch table { border-top: 1px solid var(--line); }
+  .batch td { padding: 7px 14px; }
   .adm td.all, .adm th.all { border-right: 1px solid var(--line); }
   .roll label.cell { cursor: pointer; }
   .roll input[type=checkbox] { width: 24px; height: 24px; accent-color: var(--ok); cursor: pointer; }
@@ -204,6 +217,12 @@
         <tbody id="a-summary"></tbody>
       </table>
     </div>
+
+    <div class="toolbar" style="margin-top:18px">
+      <h3 style="margin:0">제출 시간대별 <span class="muted">(확인을 누른 시각 기준 묶음)</span></h3>
+      <select id="a-day" onchange="renderBatches()" style="width:auto;padding:8px 10px;font-size:14px"></select>
+    </div>
+    <div class="batches" id="a-batches" style="margin-bottom:18px"></div>
 
     <div class="toolbar" style="margin-top:18px">
       <h3 style="margin:0">반별 링크 (담임선생님께 전달)</h3>
@@ -424,7 +443,50 @@ function setAdmin(d) {
       '<td class="url hide-m"><a href="' + esc(url) + '" target="_blank">' + esc(url) + '</a></td>' +
       '<td><button class="btn ghost sm" onclick="copyLink(' + i + ', this)">링크 복사</button></td></tr>';
   }).join('');
+  renderBatches();
   renderAdminList();
+}
+// 제출시각이 같은 학생 = 한 번에 [확인]을 누른 묶음. 최근 묶음부터
+function renderBatches() {
+  var groups = {}, days = [];
+  A.data.rows.forEach(function (r) {
+    var o = A.orig[r.sid];
+    if (!r.submittedAt || !(o.notebook || o.charger || o.cable)) return;
+    (groups[r.submittedAt] = groups[r.submittedAt] || []).push(r);
+    var day = r.submittedAt.slice(0, 10);
+    if (days.indexOf(day) < 0) days.push(day);
+  });
+  days.sort().reverse();
+  var sel = $('a-day'), cur = sel.value;
+  sel.innerHTML = '<option value="">전체 날짜</option>' + days.map(function (d) { return '<option value="' + d + '">' + dayLabel(d) + '</option>'; }).join('');
+  sel.value = days.indexOf(cur) >= 0 ? cur : '';
+  var times = Object.keys(groups).filter(function (t) { return !sel.value || t.slice(0, 10) === sel.value; }).sort().reverse();
+  $('a-batches').innerHTML = times.map(function (t) {
+    var rs = groups[t].slice().sort(function (a, b) { return a.sid.localeCompare(b.sid); });
+    var n = { notebook: 0, charger: 0, cable: 0 }, cls = [];
+    rs.forEach(function (r) {
+      ITEMS.forEach(function (k) { if (A.orig[r.sid][k]) n[k]++; });
+      var l = clsLabel(r.cls); if (cls.indexOf(l) < 0) cls.push(l);
+    });
+    var num = function (v) { return v < rs.length ? '<span class="x">' + v + '</span>' : '<b>' + v + '</b>'; };
+    return '<details class="batch"><summary>' +
+      '<span class="when">' + esc(dayLabel(t.slice(0, 10)) + ' ' + t.slice(11, 16)) + '</span>' +
+      '<span class="who">' + esc(cls.join(', ')) + ' · ' + rs.length + '명</span>' +
+      '<span class="cnt">노트북 ' + num(n.notebook) + ' · 충전기 ' + num(n.charger) + ' · 케이블 ' + num(n.cable) + '</span>' +
+      '</summary><table>' + rs.map(function (r) {
+        var o = A.orig[r.sid];
+        var miss = ITEMS.filter(function (k) { return !o[k]; }).map(function (k) { return { notebook: '노트북', charger: '충전기', cable: '케이블' }[k]; });
+        return '<tr><td>' + esc(clsLabel(r.cls)) + '</td><td>' + esc(r.sid) + '</td><td>' + esc(r.name) + '</td>' +
+          '<td class="hide-m muted">' + esc(r.serial) + '</td>' +
+          '<td>' + (miss.length ? '<span class="x">' + miss.join('·') + ' 없음</span>' : '<span class="o">3종 모두</span>') + '</td></tr>';
+      }).join('') + '</table></details>';
+  }).join('') || '<div class="muted card" style="text-align:center">아직 제출된 학생이 없습니다.</div>';
+}
+function dayLabel(d) {
+  var m = d.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return d;
+  var w = '일월화수목금토'.charAt(new Date(+m[1], m[2] - 1, +m[3]).getDay());
+  return (+m[2]) + '.' + (+m[3]) + '.(' + w + ')';
 }
 function copyText(text, btn) {
   navigator.clipboard.writeText(text).then(function () {

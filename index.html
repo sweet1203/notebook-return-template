@@ -77,6 +77,13 @@
   .adm input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--ok); cursor: pointer; vertical-align: middle; }
   .adm tr.dirty td { background: var(--warn-weak); }
   .batches { display: grid; gap: 8px; }
+  input.rc { width: 22px; height: 22px; accent-color: var(--primary); cursor: pointer; vertical-align: middle; }
+  input.rc:disabled { opacity: .25; cursor: default; }
+  .adm td.rcc, .adm th.rcc { background: var(--primary-weak); text-align: center; }
+  .batch .rcl { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--primary); }
+  .batch.okall { border-color: var(--primary); }
+  .stats.s5 { grid-template-columns: repeat(5, 1fr); }
+  @media (max-width: 520px) { .stats.s5 { grid-template-columns: repeat(2, 1fr); } }
   .batch { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
   .batch summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
   .batch summary::-webkit-details-marker { display: none; }
@@ -207,13 +214,13 @@
       </div>
     </div>
     <div class="msg" id="a-msg" style="margin:0 0 12px"></div>
-    <div class="stats" id="a-stats"></div>
+    <div class="stats s5" id="a-stats"></div>
 
     <h3 style="margin:18px 0 8px">반별 현황</h3>
     <div class="tbl-wrap" style="margin-bottom:18px">
       <table>
         <thead><tr><th>반</th><th>담임</th><th class="c">인원</th><th class="c">제출완료</th><th class="c">미제출</th>
-          <th class="c">노트북</th><th class="c">충전기</th><th class="c">케이블</th><th class="c">진행률</th></tr></thead>
+          <th class="c">노트북</th><th class="c">충전기</th><th class="c">케이블</th><th class="c">수령확인</th><th class="c">진행률</th></tr></thead>
         <tbody id="a-summary"></tbody>
       </table>
     </div>
@@ -242,6 +249,7 @@
         <select id="a-st" onchange="renderAdminList()">
           <option value="">전체 상태</option><option>제출완료</option><option>미제출</option>
           <option value="누락">물품 누락(제출완료 중)</option>
+          <option value="미수령">수령 미확인(제출완료 중)</option>
         </select>
         <input type="text" id="a-q" placeholder="이름·학번 검색" oninput="renderAdminList()">
       </div>
@@ -249,7 +257,7 @@
     </div>
     <div class="tbl-wrap" style="margin-bottom:90px">
       <table class="adm">
-        <thead><tr><th>학번</th><th>이름</th><th class="hide-m">시리얼번호</th><th class="c all">모두</th><th class="c">노트북</th><th class="c">충전기</th><th class="c">케이블</th>
+        <thead><tr><th class="rcc">수령확인</th><th>학번</th><th>이름</th><th class="hide-m">시리얼번호</th><th class="c all">모두</th><th class="c">노트북</th><th class="c">충전기</th><th class="c">케이블</th>
           <th>상태</th><th class="hide-m">제출시각</th><th class="hide-m">비고</th><th></th></tr></thead>
         <tbody id="a-body"></tbody>
       </table>
@@ -270,7 +278,7 @@ var Q = new URLSearchParams(location.search);
 var API_ID = /^[A-Za-z0-9_-]{20,}$/.test(Q.get('api') || '') ? Q.get('api') : '';
 var API_URL = 'https://script.google.com/macros/s/' + API_ID + '/exec';
 var C = { cls: '', key: '', rows: [], orig: {} };   // 반별 체크: orig = 서버에서 마지막으로 받은 값
-var A = { pw: '', data: null, orig: {} };   // orig = 서버에서 마지막으로 받은 물품 체크
+var A = { pw: '', data: null, orig: {}, open: {} };   // orig = 서버에서 받은 물품 체크, open = 펼쳐 둔 제출 묶음
 var ITEMS = ['notebook', 'charger', 'cable'];
 
 function $(id) { return document.getElementById(id); }
@@ -376,9 +384,10 @@ window.addEventListener('beforeunload', function (e) {
 
 /* ---------- 관리자 ---------- */
 function countBy(rows) {
-  var c = { total: rows.length, 제출완료: 0, 미제출: 0, notebook: 0, charger: 0, cable: 0 };
+  var c = { total: rows.length, 제출완료: 0, 미제출: 0, notebook: 0, charger: 0, cable: 0, ok: 0 };
   rows.forEach(function (r) {
     c[r.status]++;
+    if (r.adminOk) c.ok++;
     if (r.notebook) c.notebook++; if (r.charger) c.charger++; if (r.cable) c.cable++;
   });
   return c;
@@ -418,7 +427,8 @@ function setAdmin(d) {
   $('a-sheet').href = d.sheetUrl; $('a-xlsx').href = d.xlsxUrl;
   var c = countBy(d.rows);
   var miss = d.rows.filter(function (r) { return r.status === '제출완료' && !(r.notebook && r.charger && r.cable); }).length;
-  $('a-stats').innerHTML = statBox(c.total, '전체 학생') + statBox(c.제출완료, '제출완료') + statBox(c.미제출, '미제출') + statBox(miss, '물품 누락', miss ? 'warn' : '');
+  $('a-stats').innerHTML = statBox(c.total, '전체 학생') + statBox(c.제출완료, '제출완료') + statBox(c.미제출, '미제출') + statBox(miss, '물품 누락', miss ? 'warn' : '') +
+    statBox(c.ok + '/' + c.제출완료, '수령확인', c.ok < c.제출완료 ? 'warn' : '');
 
   var classes = [];
   d.rows.forEach(function (r) { if (classes.indexOf(r.cls) < 0) classes.push(r.cls); });
@@ -434,7 +444,8 @@ function setAdmin(d) {
     var pct = cc.total ? Math.round(cc.제출완료 / cc.total * 100) : 0;
     return '<tr><td>' + clsLabel(k) + '</td><td>' + esc(teacher[k] || '') + '</td><td class="c">' + cc.total + '</td>' +
       '<td class="c">' + cc.제출완료 + '</td><td class="c">' + (cc.미제출 ? '<span class="x">' + cc.미제출 + '</span>' : 0) + '</td>' +
-      '<td class="c">' + cc.notebook + '</td><td class="c">' + cc.charger + '</td><td class="c">' + cc.cable + '</td><td class="c">' + pct + '%</td></tr>';
+      '<td class="c">' + cc.notebook + '</td><td class="c">' + cc.charger + '</td><td class="c">' + cc.cable + '</td>' +
+      '<td class="c">' + cc.ok + '/' + cc.제출완료 + '</td><td class="c">' + pct + '%</td></tr>';
   }).join('');
 
   $('a-links').innerHTML = d.classes.map(function (k, i) {
@@ -469,18 +480,44 @@ function renderBatches() {
       var l = clsLabel(r.cls); if (cls.indexOf(l) < 0) cls.push(l);
     });
     var num = function (v) { return v < rs.length ? '<span class="x">' + v + '</span>' : '<b>' + v + '</b>'; };
-    return '<details class="batch"><summary>' +
+    var sids = rs.map(function (r) { return r.sid; });
+    var okN = rs.filter(function (r) { return r.adminOk; }).length;
+    return '<details class="batch' + (okN === rs.length ? ' okall' : '') + '" data-t="' + esc(t) + '"' + (A.open[t] ? ' open' : '') +
+      ' ontoggle="A.open[this.dataset.t] = this.open"><summary>' +
+      '<label class="rcl">' + rcBox(sids, null, okN === rs.length, okN > 0 && okN < rs.length) + '수령 ' + okN + '/' + rs.length + '</label>' +
       '<span class="when">' + esc(dayLabel(t.slice(0, 10)) + ' ' + t.slice(11, 16)) + '</span>' +
       '<span class="who">' + esc(cls.join(', ')) + ' · ' + rs.length + '명</span>' +
       '<span class="cnt">노트북 ' + num(n.notebook) + ' · 충전기 ' + num(n.charger) + ' · 케이블 ' + num(n.cable) + '</span>' +
       '</summary><table>' + rs.map(function (r) {
         var o = A.orig[r.sid];
         var miss = ITEMS.filter(function (k) { return !o[k]; }).map(function (k) { return { notebook: '노트북', charger: '충전기', cable: '케이블' }[k]; });
-        return '<tr><td>' + esc(clsLabel(r.cls)) + '</td><td>' + esc(r.sid) + '</td><td>' + esc(r.name) + '</td>' +
+        return '<tr><td>' + rcBox([r.sid], r) + '</td><td>' + esc(clsLabel(r.cls)) + '</td><td>' + esc(r.sid) + '</td><td>' + esc(r.name) + '</td>' +
           '<td class="hide-m muted">' + esc(r.serial) + '</td>' +
           '<td>' + (miss.length ? '<span class="x">' + miss.join('·') + ' 없음</span>' : '<span class="o">3종 모두</span>') + '</td></tr>';
       }).join('') + '</table></details>';
   }).join('') || '<div class="muted card" style="text-align:center">아직 제출된 학생이 없습니다.</div>';
+  document.querySelectorAll('input.rc[data-mixed]').forEach(function (el) { el.indeterminate = true; });
+}
+// 수령확인 체크박스. r 이 있으면 학생 1명, 없으면 묶음(checked/mixed 로 상태 지정)
+function rcBox(sids, r, checked, mixed) {
+  if (r) {
+    var o = A.orig[r.sid], sub = o.notebook || o.charger || o.cable;
+    checked = r.adminOk;
+    if (!sub) return '<input type="checkbox" class="rc" disabled title="제출 전">';
+  }
+  return '<input type="checkbox" class="rc"' + (checked ? ' checked' : '') + (mixed ? ' data-mixed="1"' : '') +
+    (r && r.adminOkAt ? ' title="수령확인 ' + esc(r.adminOkAt) + '"' : '') +
+    ' onclick="event.stopPropagation()" onchange="adminConfirm(\'' + sids.join(',') + '\', this)">';
+}
+function adminConfirm(sidList, el) {
+  var on = el.checked;
+  if (adminDirtyRows().length) {
+    el.checked = !on;
+    return alert('물품 체크를 바꾼 학생이 있어요. 먼저 아래 [확인]으로 저장해 주세요.');
+  }
+  call('adminConfirm', A.pw, sidList.split(','), on).then(setAdmin).catch(function (e) {
+    el.checked = !on; showMsg('a-msg', errText(e));
+  });
 }
 function dayLabel(d) {
   var m = d.match(/(\d{4})-(\d{2})-(\d{2})/);
@@ -506,6 +543,7 @@ function renderAdminList() {
   var rows = A.data.rows.filter(function (r) {
     if (k && r.cls !== k) return false;
     if (st === '누락') { if (r.status !== '제출완료' || (r.notebook && r.charger && r.cable)) return false; }
+    else if (st === '미수령') { if (r.status !== '제출완료' || r.adminOk) return false; }
     else if (st && r.status !== st) return false;
     if (q && (r.name + r.sid).indexOf(q) < 0) return false;
     return true;
@@ -513,7 +551,7 @@ function renderAdminList() {
   $('a-count').textContent = rows.length + '명';
   $('a-body').innerHTML = rows.map(function (r) {
     var sub = r.status !== '미제출', d = adminDirty(r);
-    return '<tr class="' + (d ? 'dirty' : '') + '"><td>' + esc(r.sid) + '</td><td>' + esc(r.name) +
+    return '<tr class="' + (d ? 'dirty' : '') + '"><td class="rcc">' + rcBox([r.sid], r) + '</td><td>' + esc(r.sid) + '</td><td>' + esc(r.name) +
         (!d && md(r.submittedAt) ? '<span class="md">' + md(r.submittedAt) + '</span>' : '') + '</td>' +
       '<td class="hide-m muted">' + esc(r.serial) + '</td>' +
       '<td class="c all"><input type="checkbox" ' + (r.notebook && r.charger && r.cable ? 'checked' : '') +
@@ -525,7 +563,7 @@ function renderAdminList() {
       '<td>' + (d ? badge('변경') : badge(r.status)) + '</td><td class="hide-m muted">' + esc(r.submittedAt) + '</td>' +
       '<td class="hide-m muted">' + esc(r.memo) + '</td>' +
       '<td>' + (sub ? '<button class="btn ghost sm" style="color:var(--bad)" onclick="adminReset(\'' + r.sid + '\', \'' + esc(r.name) + '\')">제출삭제</button>' : '') + '</td></tr>';
-  }).join('') || '<tr><td colspan="11" class="c muted" style="padding:24px">해당 학생이 없습니다.</td></tr>';
+  }).join('') || '<tr><td colspan="12" class="c muted" style="padding:24px">해당 학생이 없습니다.</td></tr>';
   var n = adminDirtyRows().length;
   $('a-savebar').classList.toggle('hidden', !n);
   $('a-saveinfo').innerHTML = '저장 안 된 학생 <b>' + n + '명</b>';
@@ -568,7 +606,7 @@ function goHome() {
     return;
   }
   if (adminDirtyRows().length && !confirm('저장하지 않은 체크가 있어요. 버리고 나갈까요?')) return;
-  A = { pw: '', data: null, orig: {} }; $('a-pw').value = '';
+  A = { pw: '', data: null, orig: {}, open: {} }; $('a-pw').value = '';
   $('a-main').classList.add('hidden'); $('a-login').classList.remove('hidden');
   hideMsg('h-msg');
   go('home');

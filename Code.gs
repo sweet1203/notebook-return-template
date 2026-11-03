@@ -28,6 +28,7 @@ const ST_DONE = '제출완료';
 const COLS = ['학번', '반', '번호', '이름', '시리얼번호', '비고',
   '노트북', '충전기', '충전케이블', '상태', '제출시각'];
 const ITEM_COLS = { notebook: '노트북', charger: '충전기', cable: '충전케이블' };
+const CONFIRM_COLS = ['관리자확인', '확인시각'];   // 관리자 수령 확인 (열이 없으면 자동으로 추가)
 const TEACHER_HEADER = ['반', '담임선생님', '링크키', '반별 링크'];
 
 // 화면에서 호출할 수 있는 함수 목록
@@ -37,6 +38,7 @@ const API = {
   classSave: classSave,
   adminLoad: adminLoad,
   adminSave: adminSave,
+  adminConfirm: adminConfirm,
   adminReset: adminReset
 };
 
@@ -125,11 +127,22 @@ function loadStatus_() {
     idx[c] = header.indexOf(c);
     if (idx[c] < 0) throw new Error('"' + SHEET_STATUS + '" 시트에 "' + c + '" 열이 없습니다. 메뉴에서 [학생명단 반영하기]를 먼저 실행해 주세요.');
   });
+  CONFIRM_COLS.forEach(function (c) {
+    idx[c] = header.indexOf(c);
+    if (idx[c] < 0) {
+      idx[c] = header.length;
+      header.push(c);
+      sh.getRange(1, idx[c] + 1).setValue(c).setFontWeight('bold');
+    }
+  });
   const rows = [];
   for (let r = 1; r < values.length; r++) {
     if (!clean_(values[r][idx['학번']])) continue;
     const o = { _r: r };
-    COLS.forEach(function (c) { o[c] = String(values[r][idx[c]]).trim(); });
+    COLS.concat(CONFIRM_COLS).forEach(function (c) {
+      const v = values[r][idx[c]];
+      o[c] = String(v == null ? '' : v).trim();
+    });
     rows.push(o);
   }
   return { sheet: sh, idx: idx, rows: rows };
@@ -142,7 +155,8 @@ function toClient_(o) {
     serial: o['시리얼번호'], memo: o['비고'],
     notebook: nb, charger: ch, cable: ca,
     status: (nb || ch || ca) ? ST_DONE : ST_NONE,
-    submittedAt: o['제출시각']
+    submittedAt: o['제출시각'],
+    adminOk: o['관리자확인'] === 'O', adminOkAt: o['확인시각']
   };
 }
 
@@ -176,6 +190,7 @@ function withLock_(fn) {
 
 // 학생별 물품 체크를 시트에 기록. changes = [{sid, notebook, charger, cable}]
 // 물품이 하나라도 체크되면 제출완료 + 제출시각(지금), 모두 해제되면 미제출
+// 물품이 바뀐 학생은 관리자 수령 확인을 지움 (다시 확인해야 함)
 function writeItems_(data, changes, onlyCls) {
   const range = data.sheet.getDataRange();
   const values = range.getValues();
@@ -188,6 +203,10 @@ function writeItems_(data, changes, onlyCls) {
     if (!o || (onlyCls && clean_(o['반']) !== onlyCls)) return;
     const row = values[o._r];
     const any = !!(c.notebook || c.charger || c.cable);
+    const changed = Object.keys(ITEM_COLS).some(function (k) {
+      return (row[data.idx[ITEM_COLS[k]]] === 'O') !== !!c[k];
+    });
+    if (changed) { row[data.idx['관리자확인']] = ''; row[data.idx['확인시각']] = ''; }
     Object.keys(ITEM_COLS).forEach(function (k) { row[data.idx[ITEM_COLS[k]]] = c[k] ? 'O' : ''; });
     row[data.idx['상태']] = any ? ST_DONE : ST_NONE;
     row[data.idx['제출시각']] = any ? time : '';
@@ -251,6 +270,32 @@ function adminSave(pw, changes) {
   });
   const res = adminLoad(pw);
   res.message = count + '명 저장했습니다';
+  return res;
+}
+
+// 관리자 수령 확인. sids 학생(제출완료인 학생만)을 on=true 면 확인, false 면 확인 취소
+function adminConfirm(pw, sids, on) {
+  checkAdmin_(pw);
+  const want = {};
+  (sids || []).forEach(function (s) { want[clean_(s)] = true; });
+  const count = withLock_(function () {
+    const data = loadStatus_();
+    const range = data.sheet.getDataRange();
+    const values = range.getValues();
+    const time = now_();
+    let n = 0;
+    data.rows.forEach(function (o) {
+      if (!want[clean_(o['학번'])]) return;
+      if (!(o['노트북'] === 'O' || o['충전기'] === 'O' || o['충전케이블'] === 'O')) return;
+      values[o._r][data.idx['관리자확인']] = on ? 'O' : '';
+      values[o._r][data.idx['확인시각']] = on ? time : '';
+      n++;
+    });
+    range.setValues(values);
+    return n;
+  });
+  const res = adminLoad(pw);
+  res.message = count + '명 ' + (on ? '수령 확인했습니다' : '수령 확인을 취소했습니다');
   return res;
 }
 
@@ -335,12 +380,13 @@ function syncRoster() {
       const p = prev[s.sid] || {};
       return [s.sid, String(parseInt(s.sid.substr(1, 2), 10)), String(parseInt(s.sid.substr(3, 2), 10)), s.name,
         s.serial, s.memo, p['노트북'] || '', p['충전기'] || '', p['충전케이블'] || '',
-        p['상태'] || ST_NONE, p['제출시각'] || ''];
+        p['상태'] || ST_NONE, p['제출시각'] || '', p['관리자확인'] || '', p['확인시각'] || ''];
     });
     st.clearContents();
-    st.getRange(1, 1, rows.length + 1, COLS.length).setNumberFormat('@');
-    st.getRange(1, 1, 1, COLS.length).setValues([COLS]).setFontWeight('bold');
-    st.getRange(2, 1, rows.length, COLS.length).setValues(rows);
+    const head = COLS.concat(CONFIRM_COLS);
+    st.getRange(1, 1, rows.length + 1, head.length).setNumberFormat('@');
+    st.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold');
+    st.getRange(2, 1, rows.length, head.length).setValues(rows);
     st.setFrozenRows(1);
 
     // 담임설정: 새 반만 추가 (기존 담임 이름·링크키는 유지)

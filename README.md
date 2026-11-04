@@ -13,6 +13,8 @@
                           우리 학교 구글 시트 + Apps Script
 ```
 
+📄 **한 장으로 보는 안내: [사용방법.pdf](사용방법.pdf)**
+
 ## 설치하기
 
 ### A. 템플릿 사본 링크를 받은 경우 (추천, 약 10분)
@@ -73,3 +75,4 @@ https://docs.google.com/spreadsheets/d/시트아이디/copy
 - `index.html`: 화면 (GitHub Pages)
 - `Code.gs`: 구글 시트에 붙이는 Apps Script
 - `노트북반납_템플릿.xlsx`: 빈 시트 템플릿 (사용방법·학생입력 탭 포함)
+- [`사용방법.pdf`](사용방법.pdf): 설치·담임 체크·관리자 수령확인 안내 (A4 2쪽, 원본 `사용방법.html`)

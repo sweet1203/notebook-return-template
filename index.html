@@ -259,7 +259,7 @@
     </div>
     <div class="tbl-wrap" style="margin-bottom:90px">
       <table class="adm">
-        <thead><tr><th class="rcc">수령확인</th><th>학번</th><th>이름</th><th class="hide-m">시리얼번호</th><th class="c all">모두</th><th class="c">노트북</th><th class="c">충전기</th><th class="c">케이블</th>
+        <thead><tr><th class="rcc"><label title="지금 보이는 학생 모두"><input type="checkbox" class="rc" id="a-rc-all" onchange="adminConfirmAll(this)"><br>수령확인</label></th><th>학번</th><th>이름</th><th class="hide-m">시리얼번호</th><th class="c all">모두</th><th class="c">노트북</th><th class="c">충전기</th><th class="c">케이블</th>
           <th>상태</th><th class="hide-m">제출시각</th><th class="hide-m">비고</th><th></th></tr></thead>
         <tbody id="a-body"></tbody>
       </table>
@@ -513,6 +513,12 @@ function rcBox(sids, r, checked, mixed) {
     (r && r.adminOkAt ? ' title="수령확인 ' + esc(r.adminOkAt) + '"' : '') +
     ' onclick="event.stopPropagation()" onchange="adminConfirm(\'' + sids.join(',') + '\', this)">';
 }
+function adminConfirmAll(el) {
+  var on = el.checked;
+  (A.visible || []).forEach(function (r) { r.adminOk = on; });
+  renderBatches();
+  renderAdminList();
+}
 // 수령확인 체크는 화면에만 표시해 두고, 아래 [확인]을 누를 때 한 번에 저장
 function adminConfirm(sidList, el) {
   var want = sidList.split(',');
@@ -553,6 +559,12 @@ function renderAdminList() {
     return true;
   });
   $('a-count').textContent = rows.length + '명';
+  // 머리줄 '모두' 체크: 지금 보이는(필터된) 학생 중 제출한 학생 기준
+  A.visible = rows.filter(function (r) { var o = A.orig[r.sid]; return o.notebook || o.charger || o.cable; });
+  var vOk = A.visible.filter(function (r) { return r.adminOk; }).length, all = $('a-rc-all');
+  all.disabled = !A.visible.length;
+  all.checked = A.visible.length > 0 && vOk === A.visible.length;
+  all.indeterminate = vOk > 0 && vOk < A.visible.length;
   $('a-body').innerHTML = rows.map(function (r) {
     var sub = r.status !== '미제출', d = adminDirty(r), di = itemDirty(r);
     return '<tr class="' + (d ? 'dirty' : '') + '"><td class="rcc">' + rcBox([r.sid], r) + '</td><td>' + esc(r.sid) + '</td><td>' + esc(r.name) +
@@ -577,7 +589,7 @@ function itemDirty(r) {
   var o = A.orig[r.sid];
   return ITEMS.some(function (k) { return r[k] !== o[k]; });
 }
-function okDirty(r) { return r.adminOk !== A.orig[r.sid].adminOk; }
+function okDirty(r) { return !!r.adminOk !== !!A.orig[r.sid].adminOk; }
 function adminDirty(r) { return itemDirty(r) || okDirty(r); }
 function adminDirtyRows() { return A.data ? A.data.rows.filter(adminDirty) : []; }
 // k 가 null 이면 '모두'
